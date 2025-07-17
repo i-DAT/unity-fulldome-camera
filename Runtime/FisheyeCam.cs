@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
-[ExecuteInEditMode]
+[ExecuteAlways]
 public class FisheyeCam : MonoBehaviour
 {
     public Shader shader;
@@ -46,8 +46,9 @@ public class FisheyeCam : MonoBehaviour
             canvas.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.AddComponent<CanvasScaler>();
             canvas.AddComponent<GraphicRaycaster>();
-            canvas.AddComponent<RawImage>().material = material;
+            canvas.AddComponent<RawImage>();
         }
+        canvas.GetComponent<RawImage>().material = material;
     }
 
     void OnDisable()
