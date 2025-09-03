@@ -1,104 +1,85 @@
-using System;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
-[ExecuteAlways, RequireComponent(typeof(Camera))]
+[ExecuteAlways]
 public class FisheyeCam : MonoBehaviour
 {
-    [SerializeField]
     public Shader shader;
-
-    [SerializeField, Range(512, 4096)]
     public int resolution = 512;
+    public float fov = 180;
 
-    Shader _shader;
-    int _resolution = 512;
-    CamInstance _instance;
+    new Camera camera;
+    RenderTexture texture;
+    Material material;
+    GameObject canvas;
 
     void OnEnable()
     {
-        if (_shader != null)
+        // To enable realtime preview in editor, we need to manage resources when the script is enabled.
+
+        // Grab the camera and disable its postprocessing - this ensures there are no visible seams 
+        // on the cubemap from vignette.
+        // TODO: this should specifically disable vignette to allow other postprocessing effects.
+        camera = GetComponent<Camera>();
+        gameObject.GetComponent<UniversalAdditionalCameraData>().renderPostProcessing = false;
+
+        // Create a new cubemap texture at the desired resolution.
+        texture = new(resolution, resolution, 24);
+        texture.dimension = UnityEngine.Rendering.TextureDimension.Cube;
+        texture.filterMode = FilterMode.Trilinear;
+        texture.anisoLevel = 4;
+        texture.Create();
+
+        // Create a material from the shader and assign the cubemap texture to its _MainTex slot.
+        material = new Material(shader);
+        material.SetTexture("_MainTex", texture);
+
+        if (GameObject.Find("FisheyeCanvas") is GameObject c)
         {
-            if (_instance != null) _instance.Dispose();
-            _instance = new(GetComponent<Camera>(), _shader, _resolution);
+            canvas = c;
         }
+        else
+        {
+            // If there is no canvas object yet, create it, and set it to display our material.
+            canvas = new GameObject("FisheyeCanvas");
+            canvas.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.AddComponent<CanvasScaler>();
+            canvas.AddComponent<GraphicRaycaster>();
+            canvas.AddComponent<RawImage>();
+        }
+        canvas.GetComponent<RawImage>().material = material;
     }
 
     void OnDisable()
     {
-        if (_instance != null) _instance.Dispose();
-        _instance = null;
-    }
-
-    void OnValidate()
-    {
-        if (_resolution != resolution)
-        {
-            _resolution = resolution;
-            if (_instance != null) _instance.Resize(_resolution);
-        }
-
-        if (_shader != shader)
-        {
-            _shader = shader;
-            OnEnable();
-        }
+        DestroyImmediate(texture);
+        DestroyImmediate(material);
+        DestroyImmediate(canvas);
     }
 
     void LateUpdate()
     {
-        if (_instance != null) _instance.Render();
+        // After each Update() frame, update the shader with the camera rotation and FOV, then
+        // render to the cubemap texture on all faces (bitmap 63).
+        // This is an expensive operation as the scene is rendered 6 times!
+        // TODO: backface culling to reduce to 5?
+        material.SetMatrix("_CameraRotation", Matrix4x4.Rotate(camera.transform.rotation));
+        material.SetFloat("_FOV", fov);
+        camera.RenderToCubemap(texture, 63);
     }
-}
 
-public class CamInstance : IDisposable
-{
-    Camera _camera;
-    RenderTexture _texture;
-    Material _material;
-    GameObject _canvas;
-
-    public CamInstance(Camera camera, Shader shader, int resolution)
+    void OnValidate()
     {
-        _camera = camera;
-
-        _texture = new(resolution, resolution, 24)
+        // When the texture resolution value is updated in editor, resize the texture.
+        // Unity doesn't really like this hack and sometimes throws errors, but it shouldn't
+        // affect a built version of the game.
+        if (texture != null && 0 < resolution && resolution <= 4096)
         {
-            dimension = UnityEngine.Rendering.TextureDimension.Cube,
-            filterMode = FilterMode.Trilinear,
-            anisoLevel = 4
-        };
-        _texture.Create();
-
-        _material = new(shader);
-        _material.SetTexture("_MainTex", _texture);
-
-        _canvas = new("FisheyeCanvas");
-        _canvas.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-        _canvas.AddComponent<CanvasScaler>();
-        _canvas.AddComponent<GraphicRaycaster>();
-        _canvas.AddComponent<RawImage>().material = _material;
-    }
-
-    public void Dispose()
-    {
-        GameObject.DestroyImmediate(_texture);
-        GameObject.DestroyImmediate(_material);
-        GameObject.DestroyImmediate(_canvas);
-    }
-
-    public void Render()
-    {
-        _material.SetMatrix("_CameraRotation", Matrix4x4.Rotate(_camera.transform.rotation));
-        _material.SetFloat("_FOV", 180);
-        _camera.RenderToCubemap(_texture, 63);
-    }
-
-    public void Resize(int resolution)
-    {
-        _texture.Release();
-        _texture.width = resolution;
-        _texture.height = resolution;
-        _texture.Create();
+            texture.Release();
+            texture.width = resolution;
+            texture.height = resolution;
+            texture.Create();
+        }
     }
 }
