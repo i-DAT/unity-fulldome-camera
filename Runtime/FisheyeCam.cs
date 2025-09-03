@@ -18,11 +18,7 @@ public class FisheyeCam : MonoBehaviour
     {
         // To enable realtime preview in editor, we need to manage resources when the script is enabled.
 
-        // Grab the camera and disable its postprocessing - this ensures there are no visible seams 
-        // on the cubemap from vignette.
-        // TODO: this should specifically disable vignette to allow other postprocessing effects.
         camera = GetComponent<Camera>();
-        gameObject.GetComponent<UniversalAdditionalCameraData>().renderPostProcessing = false;
 
         // Create a new cubemap texture at the desired resolution.
         texture = new(resolution, resolution, 24);
